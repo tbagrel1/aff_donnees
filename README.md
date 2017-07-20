@@ -1,2 +1,2 @@
-# aff_donnees
-Script permettant d'afficher les données internet consommées grâce à `ifconfig`
+# wifi_traffic
+Allows to measure and view data consumed through wifi connection.

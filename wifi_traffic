@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""Shows wifi data consumed"""
+
+import click
+import tkinter as tk
+import time
+import os
+import threading
+
+MB = 1048576
+SPLIT_WORD = "Octet"
+DEFAULT_SLEEP_TIME = 10
+WIDTH = 10
+
+class NonZeroIntParamType(click.ParamType):
+    name = "non-zero int"
+    def convert(self, value, param, ctx):
+        try:
+            value = int(value)
+            assert value >= 1
+            return value
+        except ValueError:
+            self.fail("{} is not a valid integer".format(value))
+        except AssertionError:
+            self.fail("{} is not positive".format(value))
+
+NON_ZERO_INT = NonZeroIntParamType()
+
+class UpdateDataThread(threading.Thread):
+    """Udates data in the GUI label"""
+    def __init__(self, lb10, lb11, lb12, sleep_time):
+        """Init method"""
+        super().__init__()
+        self.lb10 = lb10
+        self.lb11 = lb11
+        self.lb12 = lb12
+        self.sleep_time = sleep_time
+
+    def run(self):
+        """Main thread method"""
+        while True:
+            (data_in, data_out) = self.get_data()
+            self.lb10.config(text="{} MB".format(round(data_in / MB, 2)))
+            self.lb11.config(text="{} MB".format(round(data_out / MB, 2)))
+            self.lb12.config(text="{} MB"
+                             .format(round((data_in + data_out) / MB, 2)))
+            time.sleep(self.sleep_time)
+
+    def get_data(self):
+        """Get wifi data thanks to "ifconfig" UNIX system command"""
+        try:
+            ifc = os.popen("ifconfig").read()
+            raw_data = ifc.split("\n")[16].split(SPLIT_WORD)
+            data_in = int(raw_data[1].split(":")[1].split(" ")[0])
+            data_out = int(raw_data[2].split(":")[1].split(" ")[0])
+        except:
+            (data_in, data_out) = (0, 0)
+        return (data_in, data_out)
+
+@click.command()
+@click.option("--sleep-time", "-s", type=NON_ZERO_INT,
+              default=DEFAULT_SLEEP_TIME)
+def main(sleep_time):
+    """Shows wifi data consumed"""
+    master = tk.Tk()
+    master.title("data")
+    master.protocol("WM_DELETE_WINDOW", master.quit)
+    lb00 = tk.Label(master, text="input", justify=tk.CENTER)
+    lb01 = tk.Label(master, text="output", justify=tk.CENTER)
+    lb02 = tk.Label(master, text="total", justify=tk.CENTER)
+
+    lb10 = tk.Label(master, text="0.00 MB", justify=tk.CENTER,
+                    relief=tk.SUNKEN)
+    lb11 = tk.Label(master, text="0.00 MB", justify=tk.CENTER,
+                    relief=tk.SUNKEN)
+    lb12 = tk.Label(master, text="0.00 MB", justify=tk.CENTER,
+                    relief=tk.SUNKEN)
+
+    for row_nb in range(2):
+        for col_nb in range(3):
+            exec(("lb{0}{1}.grid(row={0}, column={1}, sticky=tk.W + tk.E + " +
+                  "tk.N + tk.S)").format(row_nb, col_nb))
+            exec("lb{}{}.config(width={})".format(row_nb, col_nb, WIDTH))
+
+    main_thread = UpdateDataThread(lb10, lb11, lb12, sleep_time)
+    main_thread.daemon = True
+    main_thread.start()
+
+    master.mainloop()
+    master.destroy()
+
+if __name__ == "__main__":
+    main()
