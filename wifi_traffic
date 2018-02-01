@@ -8,11 +8,19 @@ import tkinter as tk
 import time
 import os
 import threading
+import re
 
 MB = 1048576
 SPLIT_WORD = "Octet"
 DEFAULT_SLEEP_TIME = 10
 WIDTH = 10
+
+DEBUG = True
+
+def print_debug(msg):
+    """Prints the specified message if DEBUG == True."""
+    if DEBUG:
+        print(msg)
 
 class NonZeroIntParamType(click.ParamType):
     name = "non-zero int"
@@ -52,12 +60,13 @@ class UpdateDataThread(threading.Thread):
         """Get wifi data thanks to "ifconfig" UNIX system command"""
         try:
             ifc = os.popen("ifconfig").read()
-            raw_data = ifc.split("\n")[16].split(SPLIT_WORD)
-            data_in = int(raw_data[1].split(":")[1].split(" ")[0])
-            data_out = int(raw_data[2].split(":")[1].split(" ")[0])
+            wlan_part = ifc.split("\n\n")[-2]
+            data_in_out = [
+                int(d) for d in re.findall(r"bytes ([0-9]+)", wlan_part)[:2]]
         except:
-            (data_in, data_out) = (0, 0)
-        return (data_in, data_out)
+            data_in_out = (0, 0)
+            print_debug("Unable to gather data about wlan connection.")
+        return data_in_out
 
 @click.command()
 @click.option("--sleep-time", "-s", type=NON_ZERO_INT,
