@@ -3,102 +3,135 @@
 
 """Shows wifi data consumed"""
 
-import click
-import tkinter as tk
-import time
-import os
-import threading
 import re
+import subprocess
+import threading
+import time
+import tkinter as tk
 
-MB = 1048576
-SPLIT_WORD = "Octet"
+import click
+
 DEFAULT_SLEEP_TIME = 10
 WIDTH = 10
-
 DEBUG = True
+STICKY = tk.W + tk.E + tk.N + tk.S
+UNIT_NAME = "MB"
+UNIT_VALUE = (2 ** 10) ** 2
+ENC = "utf-8"
+
+RE_WLAN = r"(\w*?(?:wl|en)\w*?: (?:[^\n]+\n)+)\n"
+RE_DATA = r"(?:bytes ([0-9]+)|([0-9]+) Octets)"
+
 
 def print_debug(msg):
     """Prints the specified message if DEBUG == True."""
     if DEBUG:
         print(msg)
 
-class NonZeroIntParamType(click.ParamType):
-    name = "non-zero int"
-    def convert(self, value, param, ctx):
-        try:
-            value = int(value)
-            assert value >= 1
-            return value
-        except ValueError:
-            self.fail("{} is not a valid integer".format(value))
-        except AssertionError:
-            self.fail("{} is not positive".format(value))
 
-NON_ZERO_INT = NonZeroIntParamType()
+class SPositiveNumberParamType(click.ParamType):
+    """ParamType which only accepts strictly positive numbers."""
+    name = "non-zero int"
+
+    def convert(self, raw_value, param, ctx):
+        """Tries to convert the specified raw_value and raises fail method
+        if raw_value is not valid."""
+        try:
+            value = float(raw_value)
+            assert value > 0
+            return value
+        except AssertionError:
+            self.fail(
+                "\"{}\" is not a strictly positive number".format(raw_value))
+        except ValueError:
+            self.fail("\"{}\" is not a valid number".format(raw_value))
+
+
+SPOSITIVE_NUMBER_TYPE = SPositiveNumberParamType()
+
 
 class UpdateDataThread(threading.Thread):
-    """Udates data in the GUI label"""
-    def __init__(self, lb10, lb11, lb12, sleep_time):
+    """Updates data in the GUI label"""
+
+    def __init__(self, label_data_in, label_data_out, label_data_total,
+                 sleep_time):
         """Init method"""
         super().__init__()
-        self.lb10 = lb10
-        self.lb11 = lb11
-        self.lb12 = lb12
-        self.sleep_time = sleep_time
+        self._label_data_in = label_data_in
+        self._label_data_out = label_data_out
+        self._label_data_total = label_data_total
+        self._sleep_time = sleep_time
 
     def run(self):
         """Main thread method"""
         while True:
             (data_in, data_out) = self.get_data()
-            self.lb10.config(text="{} MB".format(round(data_in / MB, 2)))
-            self.lb11.config(text="{} MB".format(round(data_out / MB, 2)))
-            self.lb12.config(text="{} MB"
-                             .format(round((data_in + data_out) / MB, 2)))
-            time.sleep(self.sleep_time)
+            self._label_data_in.config(
+                text="{} {}".format(round(data_in / UNIT_VALUE, 2), UNIT_NAME))
+            self._label_data_out.config(
+                text="{} {}".format(round(data_out / UNIT_VALUE, 2),
+                                    UNIT_NAME))
+            self._label_data_total.config(
+                text="{} {}".format(
+                    round((data_in + data_out) / UNIT_VALUE, 2), UNIT_NAME))
+            time.sleep(self._sleep_time)
 
     def get_data(self):
         """Get wifi data thanks to "ifconfig" UNIX system command"""
-        try:
-            ifc = os.popen("ifconfig").read()
-            wlan_part = ifc.split("\n\n")[-2]
-            data_in_out = [
-                int(d) for d in re.findall(r"bytes ([0-9]+)", wlan_part)[:2]]
-        except:
-            data_in_out = (0, 0)
-            print_debug("Unable to gather data about wlan connection.")
-        return data_in_out
+        ifc = subprocess.check_output(["ifconfig"], encoding=ENC)
+        wlan_part_se = re.search(RE_WLAN, ifc)
+        if not wlan_part_se:
+            print_debug(
+                "Unable to gather data about a WLAN connection.")
+            return (0, 0)
+        wlan_part = wlan_part_se.group(1)
+        data_raw = re.findall(RE_DATA, wlan_part)
+        (data_in_raw, data_out_raw) = data_raw[:2]
+        data_in = int(data_in_raw[0] if data_in_raw[0] else data_in_raw[1])
+        data_out = int(data_out_raw[0] if data_out_raw[0] else data_out_raw[1])
+        return (data_in, data_out)
+
 
 @click.command()
-@click.option("--sleep-time", "-s", type=NON_ZERO_INT,
-              default=DEFAULT_SLEEP_TIME)
+@click.option("--sleep-time", "-s", type=SPOSITIVE_NUMBER_TYPE,
+              default=DEFAULT_SLEEP_TIME,
+              help="Time in seconds between updates")
 def main(sleep_time):
     """Shows wifi data consumed"""
     master = tk.Tk()
     master.title("data")
     master.protocol("WM_DELETE_WINDOW", master.quit)
-    lb00 = tk.Label(master, text="input", justify=tk.CENTER)
-    lb01 = tk.Label(master, text="output", justify=tk.CENTER)
-    lb02 = tk.Label(master, text="total", justify=tk.CENTER)
+    label_name_in = tk.Label(master, text="input", justify=tk.CENTER,
+                             width=WIDTH)
+    label_name_in.grid(row=0, column=0, sticky=STICKY)
+    label_name_out = tk.Label(master, text="output", justify=tk.CENTER,
+                              width=WIDTH)
+    label_name_out.grid(row=0, column=1, sticky=STICKY)
+    label_name_total = tk.Label(master, text="total", justify=tk.CENTER,
+                                width=WIDTH)
+    label_name_total.grid(row=0, column=2, sticky=STICKY)
 
-    lb10 = tk.Label(master, text="0.00 MB", justify=tk.CENTER,
-                    relief=tk.SUNKEN)
-    lb11 = tk.Label(master, text="0.00 MB", justify=tk.CENTER,
-                    relief=tk.SUNKEN)
-    lb12 = tk.Label(master, text="0.00 MB", justify=tk.CENTER,
-                    relief=tk.SUNKEN)
+    label_data_in = tk.Label(master, text="0.00 {}".format(UNIT_NAME),
+                             justify=tk.CENTER, width=WIDTH,
+                             relief=tk.SUNKEN)
+    label_data_in.grid(row=1, column=0, sticky=STICKY)
+    label_data_out = tk.Label(master, text="0.00 {}".format(UNIT_NAME),
+                              justify=tk.CENTER, width=WIDTH,
+                              relief=tk.SUNKEN)
+    label_data_out.grid(row=1, column=1, sticky=STICKY)
+    label_data_total = tk.Label(master, text="0.00 {}".format(UNIT_NAME),
+                                justify=tk.CENTER, width=WIDTH,
+                                relief=tk.SUNKEN)
+    label_data_total.grid(row=1, column=2, sticky=STICKY)
 
-    for row_nb in range(2):
-        for col_nb in range(3):
-            exec(("lb{0}{1}.grid(row={0}, column={1}, sticky=tk.W + tk.E + " +
-                  "tk.N + tk.S)").format(row_nb, col_nb))
-            exec("lb{}{}.config(width={})".format(row_nb, col_nb, WIDTH))
-
-    main_thread = UpdateDataThread(lb10, lb11, lb12, sleep_time)
+    main_thread = UpdateDataThread(label_data_in, label_data_out,
+                                   label_data_total, sleep_time)
     main_thread.daemon = True
     main_thread.start()
 
     master.mainloop()
     master.destroy()
+
 
 if __name__ == "__main__":
     main()
