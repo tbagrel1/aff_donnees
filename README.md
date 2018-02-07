@@ -7,7 +7,7 @@ Allows to measure and view data consumed through wifi connection.
 ## Installation
 
 - Dowload the script (`wifi_traffic.py` file) and make it executable with `chmod +x wifi_traffic.py`.
-- It is possible to launch it as a script (`./wifi_traffic.py` to launch it from its repertory for example)
+- It is possible to launch it as a script (`./wifi_traffic.py` to launch it from its directory for example)
 
 ## Requirements
 
