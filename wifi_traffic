@@ -19,8 +19,8 @@ UNIT_NAME = "MB"
 UNIT_VALUE = (2 ** 10) ** 2
 ENC = "utf-8"
 
-RE_WLAN = r"(\w*?(?:wl|en)\w*?: (?:[^\n]+\n)+)\n"
-RE_DATA = r"(?:bytes ([0-9]+)|([0-9]+) Octets)"
+RE_WLAN = r"(^\w*?(?:wl|en)\w*?(?:[^\n]+\n)+)\n"
+RE_DATA = r"(?:bytes ([0-9]+)|Octets \w*?:([0-9]+))"
 
 
 def print_debug(msg):
@@ -78,8 +78,8 @@ class UpdateDataThread(threading.Thread):
 
     def get_data(self):
         """Get wifi data thanks to "ifconfig" UNIX system command"""
-        ifc = subprocess.check_output(["ifconfig"], encoding=ENC)
-        wlan_part_se = re.search(RE_WLAN, ifc)
+        ifc = subprocess.check_output(["ifconfig"]).decode(ENC)
+        wlan_part_se = re.search(RE_WLAN, ifc, re.MULTILINE)
         if not wlan_part_se:
             print_debug(
                 "Unable to gather data about a WLAN connection.")
